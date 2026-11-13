@@ -1,0 +1,20 @@
+{
+  "name": "实践教学资源比较台",
+  "focus": "中心投入产出原始比率",
+  "options": [
+    [
+      "family",
+      "课程类别",
+      [
+        "all",
+        "engineering",
+        "design",
+        "computing"
+      ]
+    ]
+  ],
+  "selection": {
+    "family": "all"
+  },
+  "purpose": "本地研究资料浏览与复核记录"
+}
