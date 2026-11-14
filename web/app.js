@@ -22,6 +22,10 @@ async function guarded(action) {
 function selected() {
   const selection = {};
   for (const control of state.context.product.options) selection[control[0]] = element('select-' + control[0]).value;
+  // 数值型选项（质量门槛）转回数字，字符串选项保持字符串
+  for (const control of state.context.product.options) {
+    if (control[0] === 'quality_threshold') selection[control[0]] = Number(selection[control[0]]);
+  }
   return {revision: element('revision').value, selection};
 }
 
@@ -44,11 +48,11 @@ function renderControls() {
     select.id = 'select-' + key;
     for (const choice of choices) {
       const option = document.createElement('option');
-      option.value = choice;
-      option.textContent = choice;
+      option.value = String(choice);
+      option.textContent = String(choice);
       select.append(option);
     }
-    select.value = state.context.product.selection[key];
+    select.value = String(state.context.product.selection[key]);
     label.append(select);
     element('controls').append(label);
   }
@@ -87,7 +91,136 @@ function drawChart(series) {
   });
   context.fillStyle = '#29434e';
   context.fillText(high.toFixed(2), 0, 45); context.fillText(low.toFixed(2), 0, 250);
-  context.fillText(scatter ? '沿用方法均值 → 候选方法均值（原始定量配对）' : '按表中顺序展示描述值；缺测不绘制为零', 50, 20);
+  context.fillText('按表中顺序展示描述值；缺测不绘制为零', 50, 20);
+}
+
+function drawEfficiencyChart(results) {
+  const canvas = element('efficiency-chart');
+  const context = canvas.getContext('2d');
+  context.clearRect(0, 0, canvas.width, canvas.height);
+  context.font = '12px sans-serif';
+  const evaluated = results.filter(row => row.status === 'evaluated');
+  if (!evaluated.length) {
+    context.fillStyle = '#9c302d';
+    context.fillText('当前比较组没有可评估中心，请放宽课程类别、当地约束或质量门槛。', 30, 50);
+    return;
+  }
+  const y = value => 250 - value * 210;
+  context.strokeStyle = '#90a5ad';
+  context.beginPath(); context.moveTo(45, 20); context.lineTo(45, 250); context.lineTo(940, 250); context.stroke();
+  context.fillStyle = '#29434e';
+  context.fillText('1.00', 10, 45); context.fillText('0', 22, 250);
+  const step = 880 / evaluated.length;
+  evaluated.forEach((row, index) => {
+    const base = 50 + index * step;
+    const barWidth = Math.max(4, step * 0.32);
+    context.fillStyle = '#2e6f9b';
+    context.fillRect(base, y(row.score_vrs), barWidth, 250 - y(row.score_vrs));
+    context.fillStyle = '#0a7168';
+    context.fillRect(base + barWidth + 2, y(row.score_crs), barWidth, 250 - y(row.score_crs));
+    if (evaluated.length <= 15) context.fillText(row.center_id.replace('center_', ''), base, 275);
+  });
+  context.fillStyle = '#2e6f9b';
+  context.fillRect(50, 18, 10, 10);
+  context.fillStyle = '#29434e';
+  context.fillText('VRS（剔除规模差异）', 64, 27);
+  context.fillStyle = '#0a7168';
+  context.fillRect(220, 18, 10, 10);
+  context.fillStyle = '#29434e';
+  context.fillText('CRS（含规模因素）；按中心原始顺序，非排名', 234, 27);
+}
+
+function renderEfficiency(view) {
+  const efficiency = view.efficiency;
+  const notes = element('efficiency-notes');
+  notes.replaceChildren();
+  const methodLine = document.createElement('p');
+  methodLine.className = 'method-line';
+  methodLine.textContent = efficiency.method.orientation + ' · ' + efficiency.method.models.join('；');
+  notes.append(methodLine);
+  for (const note of efficiency.notes) {
+    const paragraph = document.createElement('p');
+    paragraph.textContent = note;
+    notes.append(paragraph);
+  }
+
+  const boundaries = element('efficiency-boundaries');
+  boundaries.replaceChildren();
+  for (const text of efficiency.boundaries) {
+    const item = document.createElement('p');
+    item.className = 'boundary-item';
+    item.textContent = '处理边界：' + text;
+    boundaries.append(item);
+  }
+
+  const columns = [
+    ['center_id', '中心'], ['status_text', '评估状态'],
+    ['score_vrs', 'VRS效率'], ['score_crs', 'CRS效率'], ['scale_efficiency', '规模效率'],
+    ['score_adjusted_vrs', '调整VRS'], ['returns_to_scale_text', '规模状态'],
+    ['peer_count', '参照数'], ['reference_text', '可否作参照'], ['access_text', '参照可达性']
+  ];
+  const header = document.createElement('tr');
+  for (const [, labelText] of columns) {
+    const cell = document.createElement('th'); cell.textContent = labelText; header.append(cell);
+  }
+  element('efficiency-columns').replaceChildren(header);
+  const body = element('efficiency-rows');
+  body.replaceChildren();
+  for (const row of efficiency.results) {
+    const line = document.createElement('tr');
+    line.tabIndex = 0;
+    const display = {
+      ...row,
+      status_text: row.status === 'evaluated' ? '已评估' : '缺可比对象',
+      peer_count: row.peers.length,
+      reference_text: row.reference_eligible ? '可参照' : '不参与前沿',
+      access_text: row.reference_access ? (row.reference_access.reachable ? '可达' : '部分投入高于现状') : '未评估'
+    };
+    for (const [key] of columns) {
+      const cell = document.createElement('td');
+      cell.textContent = displayValue(display[key]);
+      if (!row.reference_eligible || row.status !== 'evaluated') cell.className = 'muted';
+      line.append(cell);
+    }
+    line.onclick = () => { element('details').textContent = JSON.stringify(row, null, 2); };
+    line.onkeydown = event => { if (event.key === 'Enter') line.click(); };
+    body.append(line);
+  }
+
+  drawEfficiencyChart(efficiency.results);
+
+  const stability = element('stability');
+  stability.replaceChildren();
+  const title = document.createElement('h3');
+  title.textContent = '稳定性（提高质量门槛后效率与参照是否变化）';
+  stability.append(title);
+  const intro = document.createElement('p');
+  intro.className = 'method-line';
+  intro.textContent = efficiency.stability_note;
+  stability.append(intro);
+  const changed = efficiency.results.filter(row => row.stability && !row.stability.stable);
+  if (Number(efficiency.comparison.quality_threshold) === 0) {
+    const hint = document.createElement('p');
+    hint.textContent = '当前门槛为0。选择更高质量门槛后，这里会逐中心对比门槛0基准下的VRS得分与参照组合。';
+    stability.append(hint);
+  } else if (!changed.length) {
+    const hint = document.createElement('p');
+    hint.textContent = '所有可比较中心在收紧门槛后，VRS得分变化不超过0.02且参照组合保持一致。';
+    stability.append(hint);
+  } else {
+    const counter = document.createElement('p');
+    counter.className = 'method-line';
+    counter.textContent = `共有 ${changed.length} 个中心的判断发生变化，逐中心列示如下：`;
+    stability.append(counter);
+    for (const row of changed) {
+      const item = document.createElement('p');
+      item.className = 'boundary-item';
+      const info = row.stability;
+      item.textContent = `${row.center_id}：VRS ${info.baseline_score_vrs} → ${row.score_vrs}（变化 ${info.score_change_vrs}）；`
+        + `参照保留 ${info.peers_kept.length} 个，移出 ${info.peers_lost.join('、') || '无'}，新增 ${info.peers_added.join('、') || '无'}。`;
+      stability.append(item);
+    }
+  }
 }
 
 function render(result, heading) {
@@ -116,6 +249,7 @@ function render(result, heading) {
     element('rows').append(line);
   }
   drawChart(result.view.series);
+  renderEfficiency(result.view);
   element('details').textContent = JSON.stringify({revision: result.revision, selection: result.selection,
     history: result.view.history || null}, null, 2);
   message((heading || '已更新描述') + ' · 数据 ' + result.revision.slice(0, 12));
@@ -131,7 +265,7 @@ async function refresh() {
       const saved = await request('/api/notebooks/' + notebook.id);
       element('revision').value = saved.revision;
       for (const [key, value] of Object.entries(saved.selection)) {
-        const control = element('select-' + key); if (control) control.value = value;
+        const control = element('select-' + key); if (control) control.value = String(value);
       }
       render(saved.result, '已读取保存的描述，不随新数据变化');
     });

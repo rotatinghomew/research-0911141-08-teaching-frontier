@@ -3,6 +3,7 @@ from statistics import mean, median
 import math
 
 from .validation import require_tables, unique, finite, references
+from .efficiency import analyze_efficiency
 
 
 def validate(data):
@@ -27,7 +28,9 @@ def explore(data, selection):
                      "completed": center["completed"], "complex_modules": center["complex_modules"],
                      "completed_per_staff_hour": center["completed"] / center["staff_hours"] if center["staff_hours"] else None,
                      "funding_reported": center["funding"] is not None})
+    efficiency = analyze_efficiency(data, selection)
     return {"summary": {"中心": len(rows), "已报资金": sum(row["funding_reported"] for row in rows),
                         "完成教学量": sum(row["completed"] for row in rows)},
             "rows": rows, "series": [{"label": row["center_id"], "y": row["completed_per_staff_hour"]} for row in rows],
+            "efficiency": efficiency,
             "notes": ["单项比率只作数据核对，不构成多投入产出的效率排序。", "质量比例与产出数量量纲不同，不能直接相加。"]}

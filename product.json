@@ -1,6 +1,6 @@
 {
   "name": "实践教学资源比较台",
-  "focus": "中心投入产出原始比率",
+  "focus": "中心相对效率与改进空间（投入导向DEA，非排名）",
   "options": [
     [
       "family",
@@ -11,10 +11,33 @@
         "design",
         "computing"
       ]
+    ],
+    [
+      "constraint",
+      "当地约束",
+      [
+        "all",
+        "urban",
+        "remote"
+      ]
+    ],
+    [
+      "quality_threshold",
+      "质量门槛（参照资格，非产出）",
+      [
+        0,
+        0.75,
+        0.8,
+        0.85,
+        0.9,
+        0.95
+      ]
     ]
   ],
   "selection": {
-    "family": "all"
+    "family": "all",
+    "constraint": "all",
+    "quality_threshold": 0
   },
-  "purpose": "本地研究资料浏览与复核记录"
+  "purpose": "本地研究资料浏览、相对效率讨论与复核记录"
 }
