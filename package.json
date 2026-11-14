@@ -1,0 +1,9 @@
+{
+  "name": "teaching-frontier",
+  "version": "0.3.0",
+  "private": true,
+  "scripts": {
+    "start": "python3 -m teaching_frontier",
+    "test:browser": "python3 tests/browser_smoke.py"
+  }
+}
